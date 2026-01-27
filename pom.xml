@@ -15,7 +15,6 @@
         <jenkins.version>2.414.3</jenkins.version>
     </properties>
     <name>Log Size Killer Plugin</name>
-    <description>Kills builds if log size or workspace size exceeds a limit.</description>
     <licenses>
         <license>
             <name>MIT License</name>

@@ -1,0 +1,4 @@
+<?jelly escape-by-default='true'?>
+<div>
+    This plugin monitors build log and workspace size, aborting builds that exceed configured limits to prevent disk space exhaustion.
+</div>
