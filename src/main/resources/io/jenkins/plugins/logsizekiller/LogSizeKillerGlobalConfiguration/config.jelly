@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
+    <f:section title="Log Size Killer">
+        <f:entry title="Enable" field="enabled">
+            <f:checkbox />
+        </f:entry>
+        <f:entry title="Max Log Size (bytes)" field="maxLogSize" description="Build will be aborted if log size exceeds this limit.">
+            <f:number />
+        </f:entry>
+        <f:entry title="Max Workspace Size (bytes)" field="maxWorkspaceSize" description="Build will be aborted if workspace size exceeds this limit (checked periodically). Set to 0 to disable.">
+            <f:number />
+        </f:entry>
+        <f:entry title="Check Interval (seconds)" field="checkIntervalSeconds" description="How often to check the workspace size.">
+            <f:number />
+        </f:entry>
+    </f:section>
+</j:jelly>
