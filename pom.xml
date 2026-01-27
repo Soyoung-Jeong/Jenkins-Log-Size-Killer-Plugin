@@ -12,7 +12,7 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <properties>
-        <jenkins.version>2.414.1</jenkins.version>
+        <jenkins.version>2.414.3</jenkins.version>
     </properties>
     <name>Log Size Killer Plugin</name>
     <description>Kills builds if log size or workspace size exceeds a limit.</description>
