@@ -4,6 +4,7 @@ import hudson.Extension;
 import hudson.console.ConsoleLogFilter;
 import hudson.model.Run;
 import hudson.model.Result;
+import hudson.model.Executor;
 import hudson.console.LineTransformationOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -16,6 +17,7 @@ import java.util.logging.Logger;
 @Extension
 public class LogSizeKillerConsoleLogFilter extends ConsoleLogFilter implements Serializable {
 
+    private static final long serialVersionUID = 1L;
     private static final Logger LOGGER = Logger.getLogger(LogSizeKillerConsoleLogFilter.class.getName());
 
     @Override
@@ -44,8 +46,6 @@ public class LogSizeKillerConsoleLogFilter extends ConsoleLogFilter implements S
         @Override
         protected void eol(byte[] b, int len) throws IOException {
             if (killed) {
-                // Already killed, just discard or pass through?
-                // Probably pass through to record the final messages
                 original.write(b, 0, len);
                 return;
             }
@@ -57,7 +57,10 @@ public class LogSizeKillerConsoleLogFilter extends ConsoleLogFilter implements S
                 original.write(msg.getBytes());
                 
                 // Abort the build
-                build.getExecutor().interrupt(Result.ABORTED);
+                Executor executor = build.getExecutor();
+                if (executor != null) {
+                    executor.interrupt(Result.ABORTED);
+                }
             }
             
             original.write(b, 0, len);
@@ -65,7 +68,11 @@ public class LogSizeKillerConsoleLogFilter extends ConsoleLogFilter implements S
 
         @Override
         public void close() throws IOException {
-            original.close();
+            try {
+                flush();
+            } finally {
+                original.close();
+            }
         }
         
         @Override

@@ -5,6 +5,7 @@ import hudson.FilePath;
 import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.TaskListener;
+import hudson.model.Executor;
 import hudson.model.listeners.RunListener;
 import hudson.remoting.VirtualChannel;
 import jenkins.security.MasterToSlaveCallable;
@@ -60,7 +61,10 @@ public class WorkspaceSizeMonitorRunListener extends RunListener<Run<?, ?>> {
                         long size = workspace.act(new GetDirectorySize());
                         if (size > maxBytes) {
                             listener.getLogger().println("[LogSizeKiller] Workspace size " + size + " bytes exceeded limit " + maxBytes + ". Aborting build.");
-                            run.getExecutor().interrupt(Result.ABORTED);
+                            Executor executor = run.getExecutor();
+                            if (executor != null) {
+                                executor.interrupt(Result.ABORTED);
+                            }
                             cancelTask(run);
                         }
                     }
@@ -92,7 +96,7 @@ public class WorkspaceSizeMonitorRunListener extends RunListener<Run<?, ?>> {
         }
     }
     
-    private static class GetDirectorySize implements hudson.FilePath.FileCallable<Long> {
+    private static class GetDirectorySize implements FilePath.FileCallable<Long> {
         private static final long serialVersionUID = 1L;
         @Override
         public Long invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
@@ -114,7 +118,7 @@ public class WorkspaceSizeMonitorRunListener extends RunListener<Run<?, ?>> {
         }
 
         @Override
-        public void checkRoles(hudson.remoting.RoleChecker checker) throws SecurityException {
+        public void checkRoles(org.jenkinsci.remoting.RoleChecker checker) throws SecurityException {
             // unrestricted
         }
     }
