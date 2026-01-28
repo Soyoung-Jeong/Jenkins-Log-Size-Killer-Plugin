@@ -32,10 +32,11 @@ public class LogSizeKillerConsoleLogFilter extends ConsoleLogFilter implements S
 
         long limit = config.getMaxLogSize();
         if (limit <= 0) {
+            LOGGER.log(Level.FINE, "LogSizeKiller is enabled but limit is 0 or negative for build {0}", build.getFullDisplayName());
             return logger;
         }
 
-        // We pass the parameters to the stream to ensure it has them even if it runs on an agent
+        LOGGER.log(Level.FINE, "Decorating logger for build {0} with limit {1} bytes", new Object[]{build.getFullDisplayName(), limit});
         return new SizeCountingOutputStream(logger, build, limit);
     }
 
@@ -82,25 +83,27 @@ public class LogSizeKillerConsoleLogFilter extends ConsoleLogFilter implements S
             if (currentSize > limit) {
                 killed = true;
                 
+                LOGGER.log(Level.INFO, "Log limit reached for {0}: {1} > {2}. Initiating abort.", 
+                    new Object[]{build.getFullDisplayName(), currentSize, limit});
+
                 // Print alert to the log immediately
                 String msg = String.format("\n[LogSizeKiller] Build log exceeded limit of %d bytes. Aborting build.\n", limit);
                 try {
                     out.write(msg.getBytes(StandardCharsets.UTF_8));
                     out.flush();
                 } catch (IOException e) {
-                    // Ignore failures in writing the error message
+                    LOGGER.log(Level.FINE, "Failed to write kill message to console for " + build.getFullDisplayName(), e);
                 }
 
                 // Interrupt the build in a separate thread to avoid blocking the write
                 new Thread(() -> {
                     try {
-                        // Small cooling-off period to let the message flow through
                         Thread.sleep(500);
                         Executor executor = build.getExecutor();
                         if (executor != null) {
                             executor.interrupt(Result.ABORTED);
-                            LOGGER.log(Level.INFO, "Aborted build {0} due to log size limit ({1} bytes)", 
-                                new Object[]{build.getFullDisplayName(), limit});
+                        } else {
+                            LOGGER.log(Level.WARNING, "Could not abort build {0}: No executor found", build.getFullDisplayName());
                         }
                     } catch (Exception e) {
                         LOGGER.log(Level.WARNING, "Failed to abort build " + build.getFullDisplayName(), e);
@@ -116,6 +119,8 @@ public class LogSizeKillerConsoleLogFilter extends ConsoleLogFilter implements S
 
         @Override
         public void close() throws IOException {
+            LOGGER.log(Level.FINE, "Closing SizeCountingOutputStream for {0}. Total size: {1} bytes", 
+                new Object[]{build.getFullDisplayName(), currentSize});
             out.close();
         }
     }

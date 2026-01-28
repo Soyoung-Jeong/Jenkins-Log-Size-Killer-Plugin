@@ -42,33 +42,48 @@ public class WorkspaceSizeMonitorRunListener extends RunListener<Run<?, ?>> {
         long maxBytes = config.getMaxWorkspaceSize();
         int interval = Math.max(config.getCheckIntervalSeconds(), 10);
 
+        LOGGER.log(Level.FINE, "Scheduling workspace size monitor for {0} (limit: {1}, interval: {2}s)", 
+            new Object[]{run.getFullDisplayName(), maxBytes, interval});
+
         Runnable checkTask = new Runnable() {
             @Override
             public void run() {
                 if (!run.isBuilding()) {
+                    LOGGER.log(Level.FINE, "Build {0} is no longer building. Cancelling monitor.", run.getFullDisplayName());
                     cancelTask(run);
                     return;
                 }
 
                 try {
-                    // Try to get workspace from executor (works for both Freestyle and Pipeline)
                     Executor executor = run.getExecutor();
                     FilePath workspace = (executor != null) ? executor.getCurrentWorkspace() : null;
 
-                    // Fallback for Freestyle projects
                     if (workspace == null && run instanceof hudson.model.AbstractBuild) {
                         workspace = ((hudson.model.AbstractBuild<?, ?>) run).getWorkspace();
                     }
 
                     if (workspace != null && workspace.exists()) {
-                        long size = workspace.act(new GetDirectorySize());
+                        LOGGER.log(Level.FINER, "Checking workspace size for {0} at {1}", 
+                            new Object[]{run.getFullDisplayName(), workspace.getRemote()});
+                        
+                        long size = workspace.act(new GetDirectorySize(run.getFullDisplayName()));
+                        
+                        LOGGER.log(Level.FINER, "Workspace size for {0}: {1} bytes", 
+                            new Object[]{run.getFullDisplayName(), size});
+
                         if (size > maxBytes) {
+                            LOGGER.log(Level.INFO, "Workspace limit reached for {0}: {1} > {2}. Aborting.", 
+                                new Object[]{run.getFullDisplayName(), size, maxBytes});
+                            
                             listener.getLogger().println("[LogSizeKiller] Workspace size " + size + " bytes exceeded limit " + maxBytes + ". Aborting build.");
                             if (executor != null) {
                                 executor.interrupt(Result.ABORTED);
                             }
                             cancelTask(run);
                         }
+                    } else if (workspace != null) {
+                        LOGGER.log(Level.FINE, "Workspace at {0} does not exist yet for {1}", 
+                            new Object[]{workspace.getRemote(), run.getFullDisplayName()});
                     }
                 } catch (Exception e) {
                     LOGGER.log(Level.WARNING, "Failed to check workspace size for " + run.getFullDisplayName(), e);
@@ -93,6 +108,7 @@ public class WorkspaceSizeMonitorRunListener extends RunListener<Run<?, ?>> {
     private void cancelTask(Run<?, ?> run) {
         ScheduledFuture<?> task = tasks.remove(run.getExternalizableId());
         if (task != null) {
+            LOGGER.log(Level.FINE, "Cancelled workspace monitor for {0}", run.getFullDisplayName());
             task.cancel(false);
         }
     }
@@ -102,6 +118,11 @@ public class WorkspaceSizeMonitorRunListener extends RunListener<Run<?, ?>> {
      */
     private static class GetDirectorySize extends MasterToSlaveFileCallable<Long> {
         private static final long serialVersionUID = 1L;
+        private final String buildName;
+
+        GetDirectorySize(String buildName) {
+            this.buildName = buildName;
+        }
         
         @Override
         public Long invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
@@ -117,7 +138,12 @@ public class WorkspaceSizeMonitorRunListener extends RunListener<Run<?, ?>> {
 
                 @Override
                 public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-                    // On Windows, some files might be locked. We skip them to avoid failing the whole check.
+                    // Log at a fine level that a file was skipped (likely locked on Windows)
+                    // Note: We use a local Logger or static Logger here as this runs on the agent.
+                    // Agents have their own logger hierarchy.
+                    Logger.getLogger(WorkspaceSizeMonitorRunListener.class.getName())
+                          .log(Level.FINE, "Skipping file {0} for build {1} due to error: {2}", 
+                               new Object[]{file.toString(), buildName, exc.getMessage()});
                     return FileVisitResult.CONTINUE;
                 }
             });
