@@ -8,7 +8,7 @@ import hudson.model.TaskListener;
 import hudson.model.Executor;
 import hudson.model.listeners.RunListener;
 import hudson.remoting.VirtualChannel;
-import jenkins.security.MasterToSlaveCallable;
+import jenkins.MasterToSlaveFileCallable;
 import jenkins.util.Timer;
 
 import java.io.File;
@@ -40,8 +40,7 @@ public class WorkspaceSizeMonitorRunListener extends RunListener<Run<?, ?>> {
         }
 
         long maxBytes = config.getMaxWorkspaceSize();
-        int interval = config.getCheckIntervalSeconds();
-        if (interval < 10) interval = 10; // Minimum safety interval
+        int interval = Math.max(config.getCheckIntervalSeconds(), 10);
 
         Runnable checkTask = new Runnable() {
             @Override
@@ -52,23 +51,25 @@ public class WorkspaceSizeMonitorRunListener extends RunListener<Run<?, ?>> {
                 }
 
                 try {
-                    FilePath workspace = null;
-                    if (run instanceof hudson.model.AbstractBuild) {
+                    // Try to get workspace from executor (works for both Freestyle and Pipeline)
+                    Executor executor = run.getExecutor();
+                    FilePath workspace = (executor != null) ? executor.getCurrentWorkspace() : null;
+
+                    // Fallback for Freestyle projects
+                    if (workspace == null && run instanceof hudson.model.AbstractBuild) {
                         workspace = ((hudson.model.AbstractBuild<?, ?>) run).getWorkspace();
                     }
 
-                    if (workspace != null) {
+                    if (workspace != null && workspace.exists()) {
                         long size = workspace.act(new GetDirectorySize());
                         if (size > maxBytes) {
                             listener.getLogger().println("[LogSizeKiller] Workspace size " + size + " bytes exceeded limit " + maxBytes + ". Aborting build.");
-                            Executor executor = run.getExecutor();
                             if (executor != null) {
                                 executor.interrupt(Result.ABORTED);
                             }
                             cancelTask(run);
                         }
                     }
-
                 } catch (Exception e) {
                     LOGGER.log(Level.WARNING, "Failed to check workspace size for " + run.getFullDisplayName(), e);
                 }
@@ -92,34 +93,35 @@ public class WorkspaceSizeMonitorRunListener extends RunListener<Run<?, ?>> {
     private void cancelTask(Run<?, ?> run) {
         ScheduledFuture<?> task = tasks.remove(run.getExternalizableId());
         if (task != null) {
-            task.cancel(true);
+            task.cancel(false);
         }
     }
     
-    private static class GetDirectorySize implements FilePath.FileCallable<Long> {
+    /**
+     * Callable that runs on the agent (Linux/Windows) to calculate directory size.
+     */
+    private static class GetDirectorySize extends MasterToSlaveFileCallable<Long> {
         private static final long serialVersionUID = 1L;
+        
         @Override
         public Long invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
-            final AtomicLong size = new AtomicLong(0);
-            if (!f.exists()) return 0L;
+            final AtomicLong totalSize = new AtomicLong(0);
+            if (!f.exists() || !f.isDirectory()) return 0L;
             
             Files.walkFileTree(f.toPath(), new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    size.addAndGet(attrs.size());
+                    totalSize.addAndGet(attrs.size());
                     return FileVisitResult.CONTINUE;
                 }
+
                 @Override
                 public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                    // On Windows, some files might be locked. We skip them to avoid failing the whole check.
                     return FileVisitResult.CONTINUE;
                 }
             });
-            return size.get();
-        }
-
-        @Override
-        public void checkRoles(org.jenkinsci.remoting.RoleChecker checker) throws SecurityException {
-            // unrestricted
+            return totalSize.get();
         }
     }
 }
