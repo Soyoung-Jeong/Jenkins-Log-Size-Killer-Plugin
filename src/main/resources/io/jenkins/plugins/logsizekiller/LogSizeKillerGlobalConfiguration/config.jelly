@@ -5,10 +5,10 @@
         <f:entry title="Enable" field="enabled">
             <f:checkbox />
         </f:entry>
-        <f:entry title="Max Log Size (bytes)" field="maxLogSize" description="Build will be aborted if log size exceeds this limit.">
+        <f:entry title="Max Log Size (MB)" field="maxLogSizeMB" description="Build will be aborted if log size exceeds this limit.">
             <f:number />
         </f:entry>
-        <f:entry title="Max Workspace Size (bytes)" field="maxWorkspaceSize" description="Build will be aborted if workspace size exceeds this limit (checked periodically). Set to 0 to disable.">
+        <f:entry title="Max Workspace Size (MB)" field="maxWorkspaceSizeMB" description="Build will be aborted if workspace size exceeds this limit (checked periodically). Set to 0 to disable.">
             <f:number />
         </f:entry>
         <f:entry title="Check Interval (seconds)" field="checkIntervalSeconds" description="How often to check the workspace size.">

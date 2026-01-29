@@ -16,11 +16,11 @@ public class LogSizeKillerGlobalConfiguration extends GlobalConfiguration {
     }
 
     private boolean enabled;
-    private long maxLogSize = 10 * 1024 * 1024; // Default 10MB
+    private long maxLogSizeMB = 10; // Default 10MB
     /**
-     * Max workspace size in bytes. 0 means disabled.
+     * Max workspace size in MB. 0 means disabled.
      */
-    private long maxWorkspaceSize = 0; 
+    private long maxWorkspaceSizeMB = 0; 
     
     private int checkIntervalSeconds = 60; // Default 60 seconds
 
@@ -37,22 +37,32 @@ public class LogSizeKillerGlobalConfiguration extends GlobalConfiguration {
         save();
     }
 
-    public long getMaxLogSize() {
-        return maxLogSize;
+    public long getMaxLogSizeMB() {
+        return maxLogSizeMB;
     }
 
-    public void setMaxLogSize(long maxLogSize) {
-        this.maxLogSize = maxLogSize;
+    public void setMaxLogSizeMB(long maxLogSizeMB) {
+        this.maxLogSizeMB = maxLogSizeMB;
         save();
     }
     
-    public long getMaxWorkspaceSize() {
-        return maxWorkspaceSize;
+    // Helper method for internal use
+    public long getMaxLogSizeBytes() {
+        return maxLogSizeMB * 1024 * 1024;
     }
 
-    public void setMaxWorkspaceSize(long maxWorkspaceSize) {
-        this.maxWorkspaceSize = maxWorkspaceSize;
+    public long getMaxWorkspaceSizeMB() {
+        return maxWorkspaceSizeMB;
+    }
+
+    public void setMaxWorkspaceSizeMB(long maxWorkspaceSizeMB) {
+        this.maxWorkspaceSizeMB = maxWorkspaceSizeMB;
         save();
+    }
+    
+    // Helper method for internal use
+    public long getMaxWorkspaceSizeBytes() {
+        return maxWorkspaceSizeMB * 1024 * 1024;
     }
 
     public int getCheckIntervalSeconds() {

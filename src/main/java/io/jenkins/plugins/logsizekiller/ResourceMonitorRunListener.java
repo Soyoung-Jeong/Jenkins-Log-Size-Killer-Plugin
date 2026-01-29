@@ -41,17 +41,17 @@ public class ResourceMonitorRunListener extends RunListener<Run<?, ?>> {
             return;
         }
 
-        // If both limits are disabled, do nothing
-        if (config.getMaxLogSize() <= 0 && config.getMaxWorkspaceSize() <= 0) {
+        long logLimitBytes = config.getMaxLogSizeBytes();
+        long wsLimitBytes = config.getMaxWorkspaceSizeBytes();
+        int interval = Math.max(config.getCheckIntervalSeconds(), 10);
+
+        // If both limits are disabled (<= 0), do nothing
+        if (logLimitBytes <= 0 && wsLimitBytes <= 0) {
             return;
         }
 
-        long logLimit = config.getMaxLogSize();
-        long wsLimit = config.getMaxWorkspaceSize();
-        int interval = Math.max(config.getCheckIntervalSeconds(), 10);
-
-        LOGGER.log(Level.FINE, "Scheduling resource monitor for {0} (LogLimit: {1}, WsLimit: {2}, Interval: {3}s)", 
-            new Object[]{run.getFullDisplayName(), logLimit, wsLimit, interval});
+        LOGGER.log(Level.FINE, "Scheduling resource monitor for {0} (LogLimit: {1} MB, WsLimit: {2} MB, Interval: {3}s)", 
+            new Object[]{run.getFullDisplayName(), config.getMaxLogSizeMB(), config.getMaxWorkspaceSizeMB(), interval});
 
         Runnable checkTask = new Runnable() {
             @Override
@@ -63,21 +63,17 @@ public class ResourceMonitorRunListener extends RunListener<Run<?, ?>> {
 
                 try {
                     // 1. Check Log Size via File (works for all Project types including Pipeline)
-                    if (logLimit > 0) {
+                    if (logLimitBytes > 0) {
                         File logFile = run.getLogFile();
                         if (logFile != null && logFile.exists()) {
                             long logSize = logFile.length();
-                            if (logSize > logLimit) {
-                                LOGGER.log(Level.INFO, "Log limit exceeded for {0}: {1} > {2}", 
-                                    new Object[]{run.getFullDisplayName(), logSize, logLimit});
+                            if (logSize > logLimitBytes) {
+                                LOGGER.log(Level.INFO, "Log limit exceeded for {0}: {1} > {2} bytes", 
+                                    new Object[]{run.getFullDisplayName(), logSize, logLimitBytes});
                                 
                                 // Try to write to the log before killing
                                 try {
-                                    // Note: This approach appends to the log file on master, which is safe.
-                                    // Use a temporary listener or append to the existing one? Use global logger for now or try to append.
-                                    // Actually, just killing is fine, the reason will be in the abort cause.
-                                    // Better:
-                                    listener.getLogger().println("\n[LogSizeKiller] Build log exceeded limit of " + logLimit + " bytes. Aborting build.\n");
+                                    listener.getLogger().println("\n[LogSizeKiller] Build log exceeded limit of " + config.getMaxLogSizeMB() + " MB. Aborting build.\n");
                                 } catch (Exception ignore) {}
                                 
                                 kill(run, listener);
@@ -88,8 +84,8 @@ public class ResourceMonitorRunListener extends RunListener<Run<?, ?>> {
                     }
 
                     // 2. Check Workspace Size
-                    if (wsLimit > 0) {
-                        checkWorkspaceSize(run, listener, wsLimit);
+                    if (wsLimitBytes > 0) {
+                        checkWorkspaceSize(run, listener, wsLimitBytes, config.getMaxWorkspaceSizeMB());
                     }
 
                 } catch (Exception e) {
@@ -102,7 +98,7 @@ public class ResourceMonitorRunListener extends RunListener<Run<?, ?>> {
         tasks.put(run.getExternalizableId(), task);
     }
 
-    private void checkWorkspaceSize(Run<?, ?> run, TaskListener listener, long maxBytes) {
+    private void checkWorkspaceSize(Run<?, ?> run, TaskListener listener, long maxBytes, long maxMB) {
         try {
             // Best effort for Freestyle and simple Pipeline
             Executor executor = run.getExecutor();
@@ -112,13 +108,10 @@ public class ResourceMonitorRunListener extends RunListener<Run<?, ?>> {
                 workspace = ((hudson.model.AbstractBuild<?, ?>) run).getWorkspace();
             }
 
-            // NOTE: For complex Pipelines with multiple agents, this listener might not see all workspaces.
-            // This generally works for the 'main' workspace or the node running the current chunk if visible.
-            
             if (workspace != null && workspace.exists()) {
                 long size = workspace.act(new GetDirectorySize(run.getFullDisplayName()));
                 if (size > maxBytes) {
-                    listener.getLogger().println("[LogSizeKiller] Workspace size " + size + " bytes exceeded limit " + maxBytes + ". Aborting build.");
+                    listener.getLogger().println("[LogSizeKiller] Workspace size " + size + " bytes exceeded limit " + maxMB + " MB. Aborting build.");
                     kill(run, listener);
                 }
             }
